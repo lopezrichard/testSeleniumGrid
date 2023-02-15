@@ -108,8 +108,15 @@ services:
       - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
       - SE_ENABLE_TRACING=true
       - JAVA_OPTS=-Dotel.traces.exporter=jaeger -Dotel.exporter.jaeger.endpoint=http://jaegar:14250 -Dotel.resource.attributes=service.name=selenium-node-firefox 
-
   maven:
+    # Run pre-built maven image from docker library
     image: maven:3.8.7-eclipse-temurin-11-alpine
-
-
+    volumes:
+      # Cache maven dependencies
+      - $HOME/.m2:/root/.m2
+      # Mount the application source and target directories
+      - ..:/app
+    # Run maven inside the application directory
+    working_dir: /app
+volumes:
+  maven-repository:

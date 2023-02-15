@@ -1,14 +1,153 @@
-version: "3"
-services:
-  maven:
-    # Run pre-built maven image from docker library
-    image: maven:3.8.7-eclipse-temurin-11-alpine
-    volumes:
-      # Cache maven dependencies
-      - $HOME/.m2:/root/.m2
-      # Mount the application source and target directories
-      - ..:/app
-    # Run maven inside the application directory
-    working_dir: /app
 volumes:
-  maven-repository:
+  maven-repo:
+
+services:
+
+  # Opp Frontend - Angular client deployed on an NGINX Server
+  opp-frontend:
+    container_name: "opp-frontend"
+    image: "oots/oots-opp-frontend"
+    build:
+      context: ../oots_opp_frontend
+      args:
+        - BACKEND_URL=${BACKEND_URL}
+    ports:
+      - "8008:80"
+
+  # Opp Backend - Standalone netty based REST API application, using jooby.io
+  opp-backend:
+    volumes:
+      - maven-repo:/root/.m2
+    container_name: "opp-backend"
+    image: "oots/oots-opp-backend"
+    environment:
+      EB_URL: "${EB_URL}"
+      DSD_URL: "${DSD_URL}"
+      AP_URL: "${C2_AP_URL}"
+      EDEL_TIMEOUT: "${EDEL_TIMEOUT}"
+    build:
+      context: ../oots_opp_backend
+    ports:
+      - "8009:8080"
+
+  # DSD Server - Python 3
+  dsd:
+    container_name: "dsd"
+    image: "oots/dsd-server"
+    build:
+      context: ../oots_cs
+      dockerfile: Dockerfile-dsd
+    ports:
+      - "5000:5000"
+
+  # Evidence Broker Server - Python 3
+  eb:
+    container_name: "eb"
+    image: "oots/eb-server"
+    build:
+      context: ../oots_cs
+      dockerfile: Dockerfile-eb
+    ports:
+      - "5001:5001"
+
+  # Data Service - Python 3
+  dataservice:
+    container_name: "dataservice"
+    image: "oots/oots-dataservice"
+    build:
+      context: ../oots_ex
+      dockerfile: Dockerfile
+    depends_on:
+      - domibus-c3
+
+
+  #### Access Points
+
+  ##
+  ## Corner 2 - Domibus Tomcat MySQL Blue Configuration
+  ##
+  mysqlc2:
+    image: ${IMAGE_TAG:-domibustest}/domibus-mysql8:4.2.1-SNAPSHOT
+    container_name: ap-db-c2
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=domibus
+      - MYSQL_USER=edelivery
+      - MYSQL_PASSWORD=edelivery
+    security_opt:
+      - seccomp:unconfined
+
+
+  domibus-c2:
+    image: oots/domibus-c2
+    container_name: domibus-c2
+    build:
+      context: domibus
+      dockerfile: Dockerfile_c2
+    environment:
+      - DB_TYPE=MySQL
+      - DB_HOST=mysqlc2
+      - DB_PORT=3306
+      - DB_USER=edelivery
+      - DB_PASS=edelivery
+      - CHECK_DEFAULT_PASSWD=false
+      - ENABLE_JACOCO
+      - CERT_ALIAS=blue_gw
+      - LOGGER_LEVEL_EU_DOMIBUS=INFO
+      - LOGGER_LEVEL_ORG_APACHE_CXF=INFO
+      # custom parameters
+      - domibus.msh.pull.cron=0 0 0/1 * * ?
+      - domibus.jms.connectionFactory.session.cache.size=1
+      - domibus.alert.sender.smtp.url=smtp-server
+      - domibus.alert.sender.smtp.port=2500
+      - domibus.alert.sender.email=noreply-c2@localhost
+      - domibus.alert.receiver.email=admin-c2@localhost
+    ports:
+      - "8782:8080"
+    command: dockerize -wait tcp:/mysqlc2:3306 -timeout 20s
+    depends_on:
+      - mysqlc2
+
+  ##
+  ## Corner 3 - Domibus tomcat MySQL Red Configuration
+  ##
+  mysqlc3:
+    image: ${IMAGE_TAG:-domibustest}/domibus-mysql8:4.2.1-SNAPSHOT
+    container_name: ap-db-c3
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=domibus
+      - MYSQL_USER=edelivery
+      - MYSQL_PASSWORD=edelivery
+    security_opt:
+      - seccomp:unconfined
+
+  domibus-c3:
+    image: oots/domibus-c3
+    container_name: domibus-c3
+    build:
+      context: domibus
+      dockerfile: Dockerfile_c3
+    environment:
+      - DB_TYPE=MySQL
+      - DB_HOST=mysqlc3
+      - DB_PORT=3306
+      - DB_USER=edelivery
+      - DB_PASS=edelivery
+      - CHECK_DEFAULT_PASSWD=false
+      - ENABLE_JACOCO
+      - CERT_ALIAS=red_gw
+      - LOGGER_LEVEL_EU_DOMIBUS=INFO
+      - LOGGER_LEVEL_ORG_APACHE_CXF=INFO
+      # custom parameters
+      - domibus.msh.pull.cron=0 0 0/1 * * ?
+      - domibus.jms.connectionFactory.session.cache.size=1
+      - domibus.alert.sender.smtp.url=smtp-server
+      - domibus.alert.sender.smtp.port=2500
+      - domibus.alert.sender.email=noreply-c3@localhost
+      - domibus.alert.receiver.email=admin-c3@localhost
+    ports:
+      - "8783:8080"
+    command: dockerize -wait tcp:/mysqlc3:3306 -timeout 20s
+    depends_on:
+      - mysqlc3

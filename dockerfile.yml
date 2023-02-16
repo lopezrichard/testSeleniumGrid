@@ -1,6 +1,32 @@
-  maven:
-    # Run pre-built maven image from docker library
-    image: maven:3.8.7-eclipse-temurin-11-alpine
-    volumes:
-      - ${HOME}/.m2/settings.xml:/usr/share/maven/ref/settings.xml 
-      - ${HOME}/.m2:/root/.m2
+FROM alpine:latest
+
+ENV JAVA_HOME=/usr/lib/jdk
+ENV PATH=${PATH}:${JAVA_HOME}/bin
+
+# Default to UTF-8 file.encoding
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
+
+RUN apk add --no-cache fontconfig libretls musl-locales musl-locales-lang ttf-dejavu tzdata zlib \
+    && rm -rf /var/cache/apk/*
+
+
+RUN wget -nv -O jdk.tar.gz https://aka.ms/download-jdk/microsoft-jdk-11-alpine-x64.tar.gz && \
+    mkdir $JAVA_HOME && \
+    tar xf jdk.tar.gz -C $JAVA_HOME --strip-components 1 --no-same-owner
+
+
+ENV MAVEN_VERSION 3.5.4
+ENV MAVEN_HOME /usr/lib/mvn
+ENV PATH $MAVEN_HOME/bin:$PATH
+
+RUN wget http://archive.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz && \
+  tar -zxvf apache-maven-$MAVEN_VERSION-bin.tar.gz && \
+  rm apache-maven-$MAVEN_VERSION-bin.tar.gz && \
+  mv apache-maven-$MAVEN_VERSION /usr/lib/mvn
+
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
+
+RUN  wget  https://github.com/SeleniumHQ/selenium/releases/download/selenium-4.8.0/selenium-server-4.8.0.jar
+RUN  nohup java -jar selenium-server-4.8.0.jar standalone --detect-drivers true >log.log &
+
